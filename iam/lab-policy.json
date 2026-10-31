@@ -5,6 +5,7 @@
       "Sid": "LabServices",
       "Effect": "Allow",
       "Action": [
+        "cloudshell:*",
         "cloudformation:*",
         "lambda:*",
         "events:*",
@@ -38,9 +39,20 @@
         "iam:PutRolePolicy",
         "iam:DeleteRolePolicy",
         "iam:AttachRolePolicy",
-        "iam:DetachRolePolicy"
+        "iam:DetachRolePolicy",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRolePolicies",
+        "iam:UntagRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:UpdateRole"
       ],
       "Resource": "arn:aws:iam::*:role/devops-day-lab-*"
+    },
+    {
+      "Sid": "ServiceLinkedRoles",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::*:role/aws-service-role/*"
     }
   ]
 }

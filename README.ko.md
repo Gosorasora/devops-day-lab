@@ -82,7 +82,7 @@
 | Amazon SNS | 온콜 토픽. 이메일과 선택 SMS |
 | AWS Systems Manager OpsCenter | 알람이 만드는 OpsItem. 심각도와 카테고리 포함 |
 | AWS Systems Manager Automation | `redrive-dlq` 런북(`sqs:StartMessageMoveTask`) |
-| AWS CodeDeploy | `Canary10Percent5Minutes`, 카나리 알람에 자동 롤백 |
+| AWS CodeDeploy | `Canary10Percent10Minutes`, 카나리 알람에 자동 롤백 |
 | AWS User Notifications (선택) | Console Mobile App 푸시 알림 |
 
 ## 비용

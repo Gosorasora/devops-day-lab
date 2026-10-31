@@ -19,7 +19,8 @@ case "${1:-}" in
     echo "https://$R.console.aws.amazon.com/fis/home?region=$R#Experiments/$ID"
     ;;
   stop)
-    for ID in $(aws fis list-experiments --region "$R" --query "experiments[?state.status=='running' || state.status=='initiating' || state.status=='pending'].id" --output text); do
+    T1=$(out FisErrorTemplate); T2=$(out FisDelayTemplate)
+    for ID in $(aws fis list-experiments --region "$R" --query "experiments[?(experimentTemplateId=='$T1' || experimentTemplateId=='$T2') && (state.status=='running' || state.status=='initiating' || state.status=='pending')].id" --output text); do
       echo "stopping $ID: $(aws fis stop-experiment --id "$ID" --region "$R" --query experiment.state.status --output text)"
     done
     ;;

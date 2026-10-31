@@ -57,7 +57,7 @@
 | 역할 | 서비스 | 템플릿에서 하는 일 |
 |---|---|---|
 | 앱 | EventBridge, Scheduler, SQS, Lambda, S3 | 주문 생성, 전달, 처리, 보관 |
-| 배포 | CodeDeploy | `Canary10Percent5Minutes`, 알람 시 자동 롤백 |
+| 배포 | CodeDeploy | `Canary10Percent10Minutes`, 알람 시 자동 롤백 |
 | 관측 | CloudWatch, X-Ray | 알람 5개, 대시보드 1개, 추적 활성화 |
 | 카오스 | AWS FIS | 실험 템플릿 2개, 중단 조건 1개 |
 | 온콜·복구 | SNS, OpsCenter, Automation | 메일·SMS, OpsItem 자동 생성, DLQ 재처리 런북 |
@@ -70,7 +70,7 @@
   - 대시보드 `devops-day-lab`: 분당 호출 10, 오류 0, p95 지연, 큐 깊이 0.
   - 구조화 로그: Lambda가 주문마다 JSON 한 줄(`order_id`, `item`, `amount`, `ms`)을 남깁니다.
   - Logs Insights: `stats sum(amount) by item`으로 품목별 매출을 바로 뽑습니다.
-  - X-Ray 서비스 맵: SQS에서 Lambda, Lambda에서 S3로 가는 호출과 소요 시간.
+  - X-Ray 서비스 맵: Lambda 서비스 노드와 함수 노드, 호출별 소요 시간 분포.
 - 발표자 노트: 여기서 참가자에게 종이에 네 숫자(호출, 오류, p95, DLQ)를 적게 합니다. 장애 단계에서 이 숫자가 어떻게 변하는지 비교하는 것이 실습의 뼈대입니다. 앱 지표 `DevOpsDayLab/OrdersArchived`는 SDK 호출 없이 로그 한 줄(embedded metric format)로 만든 지표라는 점도 짚어 줍니다.
 - 화면: CloudWatch 대시보드 `devops-day-lab` 전체 화면. 알람 위젯 5개가 모두 OK인 상태.
 
@@ -140,10 +140,10 @@
 
 - 불릿
   - `scripts/release.sh on`은 `Bug=on`으로 스택을 다시 배포합니다. 새 버전은 주문마다 예외를 던집니다.
-  - SAM `DeploymentPreference: Canary10Percent5Minutes`. CodeDeploy가 트래픽 10%를 새 버전으로 5분간 보냅니다.
+  - SAM `DeploymentPreference: Canary10Percent10Minutes`. CodeDeploy가 트래픽 10%를 새 버전으로 10분간 보냅니다.
   - 알람 `devops-day-lab-canary-errors`는 새 버전(`ExecutedVersion`)의 오류만 셉니다. 1건이면 울립니다.
   - CodeDeploy가 롤백하고 CloudFormation은 업데이트 실패로 끝납니다. 온콜용 알람(1분 5건)은 울리지 않습니다. 고객이 모르는 사이에 끝난 장애입니다.
-- 발표자 노트: 핵심은 알람의 차원입니다. 함수 전체 오류를 보는 알람으로는 카나리 10%의 실패가 임계값에 닿지 않습니다. 새 버전만 보는 알람이 따로 있어야 롤백이 됩니다. `AutoPublishAliasAllProperties: true` 덕분에 코드가 아니라 환경 변수만 바뀌어도 새 버전이 발행되어 카나리가 동작합니다. 실패한 메시지는 재시도 때 90% 확률로 옛 버전에 가서 성공하므로 DLQ에 쌓이지 않습니다.
+- 발표자 노트: 핵심은 알람의 차원입니다. 함수 전체 오류를 보는 알람으로는 카나리 10%의 실패가 임계값에 닿지 않습니다. 새 버전만 보는 알람이 따로 있어야 롤백이 됩니다. SAM은 코드가 바뀔 때만 새 버전을 발행하므로, 스크립트가 `Release` 파라미터(`Bug` 값 + 코드 체크섬)를 바꿔 환경 변수만 바뀌어도 새 버전이 발행되게 했습니다. 실패한 메시지는 재시도 때 90% 확률로 옛 버전에 가서 성공하므로 DLQ에 쌓이지 않습니다.
 - 화면: CodeDeploy 배포 상세 화면(트래픽 이동 그래프와 롤백 이벤트), 그 뒤 CloudFormation 스택 상태 `UPDATE_ROLLBACK_COMPLETE`.
 
 ## 12. 비용과 정리

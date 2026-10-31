@@ -48,7 +48,7 @@ If you do not know what normal looks like, you cannot see an outage. Check three
 
 - Alarms: all five OK.
 - Orders: invocations vs errors: 10 per minute, 0 errors.
-- Latency p50 / p95: a few hundred milliseconds.
+- Latency p50 / p95: around 100 ms.
 - Queue depth: orders vs dead-letter: both near 0.
 - Orders archived: the metric the app writes itself. 10 per minute.
 - Last orders: the structured log table with `order_id`, `item`, `amount` and `ms` columns.
@@ -61,7 +61,7 @@ fields @timestamp, order_id, item, amount, ms | filter level = 'INFO' | stats su
 
 Revenue per item. The query works because every log line is one JSON object.
 
-**The X-Ray service map.** Open CloudWatch > X-Ray traces > Service map. You see SQS to Lambda to S3. Click a node for its response-time distribution.
+**The X-Ray service map.** Open CloudWatch > X-Ray traces > Service map. You see the Lambda service node and the function node (the S3 call inside the function is not drawn, there is no X-Ray SDK in the code). Click a node for its response-time distribution.
 
 Write down: the normal error rate (0), the normal p95 in milliseconds, the normal dead-letter depth (0).
 
@@ -123,7 +123,7 @@ Deployments are a common cause of outages. Ship a version that crashes on every 
 scripts/release.sh on
 ```
 
-`Bug=on` publishes a new version and CodeDeploy rolls it out with `Canary10Percent5Minutes`. Only 10% of traffic goes to the new version.
+`Bug=on` publishes a new version and CodeDeploy rolls it out with `Canary10Percent10Minutes`. Only 10% of traffic goes to the new version. To get orders onto the new version sooner, add some with `scripts/send.sh 20`.
 
 1. Open the CodeDeploy console link the script prints. The deployment is in progress and shows the traffic split.
 2. Within 1 to 2 minutes `devops-day-lab-canary-errors` goes to ALARM. This alarm counts errors of the new version only (ExecutedVersion); one error is enough.

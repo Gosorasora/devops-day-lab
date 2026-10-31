@@ -21,6 +21,11 @@ Parameters:
     Default: "off"
     AllowedValues: ["off", "on"]
     Description: '"on" ships a consumer version that crashes on every order. Only for the canary-rollback drill (scripts/release.sh on).'
+  Release:
+    Type: String
+    Default: initial
+    Description: Alphanumeric. Any new value publishes a new consumer version. The scripts pass the Bug value plus a checksum of src/, so a config flip and a code change both ship a version CodeDeploy can roll back.
+    AllowedPattern: "[A-Za-z0-9]+"
   FisLayerArn:
     Type: AWS::SSM::Parameter::Value<String>
     Default: /aws/service/fis/lambda-extension/AWS-FIS-extension-x86_64/1.x.x
@@ -124,9 +129,9 @@ Resources:
       Tracing: Active
       Layers: [!Ref FisLayerArn]
       AutoPublishAlias: live
-      AutoPublishAliasAllProperties: true  # a config-only change (Bug=on) still publishes a version, so the canary has something to roll back
+      AutoPublishCodeSha256: !Ref Release  # SAM only hashes the code: a Bug=on env change alone would not publish a version
       DeploymentPreference:
-        Type: Canary10Percent5Minutes
+        Type: Canary10Percent10Minutes  # 10 minutes so that one in ten orders is certain to hit the new version before the canary ends
         Alarms: [!Ref CanaryErrors]
       Environment:
         Variables:

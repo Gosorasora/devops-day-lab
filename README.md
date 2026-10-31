@@ -82,7 +82,7 @@ The participant guide is [docs/guide.md](docs/guide.md) ([한국어](docs/guide.
 | Amazon SNS | The on-call topic: email and optional SMS |
 | AWS Systems Manager OpsCenter | OpsItems opened by alarms, with severity and category |
 | AWS Systems Manager Automation | The `redrive-dlq` runbook (`sqs:StartMessageMoveTask`) |
-| AWS CodeDeploy | `Canary10Percent5Minutes` with automatic rollback on the canary alarm |
+| AWS CodeDeploy | `Canary10Percent10Minutes` with automatic rollback on the canary alarm |
 | AWS User Notifications (optional) | Push notifications to the Console Mobile App |
 
 ## Cost
@@ -103,7 +103,6 @@ aws iam put-user-policy --user-name <user> --policy-name devops-day-lab --policy
 
 The optional Console Mobile App push (AWS User Notifications) is covered by the same policy.
 
-The optional Console Mobile App step uses AWS User Notifications, which this policy does not cover.
 
 ## Uninstall
 

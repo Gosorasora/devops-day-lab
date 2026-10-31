@@ -48,7 +48,7 @@ cd devops-day-lab
 
 - Alarms: 다섯 개 모두 OK.
 - Orders: invocations vs errors: 1분에 10, 오류 0.
-- Latency p50 / p95: 수백 밀리초.
+- Latency p50 / p95: 100 ms 안팎.
 - Queue depth: orders vs dead-letter: 둘 다 0 근처.
 - Orders archived: 앱이 직접 쓴 지표. 1분에 10.
 - Last orders: 구조화 로그 표. `order_id`, `item`, `amount`, `ms` 열이 있습니다.
@@ -61,7 +61,7 @@ fields @timestamp, order_id, item, amount, ms | filter level = 'INFO' | stats su
 
 품목별 매출이 나옵니다. 로그가 JSON 한 줄이라서 쿼리가 됩니다.
 
-**X-Ray 서비스 맵.** CloudWatch > X-Ray traces > Service map을 엽니다. SQS에서 Lambda로, Lambda에서 S3로 가는 노드가 보입니다. 노드를 눌러 응답 시간 분포를 봅니다.
+**X-Ray 서비스 맵.** CloudWatch > X-Ray traces > Service map을 엽니다. Lambda 서비스 노드와 함수 노드가 보입니다(함수 안의 S3 호출은 X-Ray SDK가 없어 따로 그려지지 않습니다). 노드를 눌러 응답 시간 분포를 봅니다.
 
 적어 둘 것: 정상 오류율(0), 정상 p95(밀리초), 정상 데드레터 깊이(0).
 
@@ -123,7 +123,7 @@ FIS 콘솔에서 실험을 열어 **Stop conditions**를 봅니다. `devops-day-
 scripts/release.sh on
 ```
 
-`Bug=on`으로 새 버전이 발행되고 CodeDeploy가 `Canary10Percent5Minutes`로 배포합니다. 트래픽의 10%만 새 버전으로 갑니다.
+`Bug=on`으로 새 버전이 발행되고 CodeDeploy가 `Canary10Percent10Minutes`로 배포합니다. 트래픽의 10%만 새 버전으로 갑니다. 새 버전에 주문이 빨리 닿게 하려면 `scripts/send.sh 20`으로 주문을 더 넣어도 됩니다.
 
 1. 출력된 CodeDeploy 콘솔 링크를 엽니다. 배포가 진행 중이고 트래픽 비율이 보입니다.
 2. 1~2분 안에 `devops-day-lab-canary-errors` 알람이 ALARM이 됩니다. 이 알람은 새 버전(ExecutedVersion)의 오류만 셉니다. 오류 1건이면 울립니다.

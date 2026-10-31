@@ -11,7 +11,7 @@ fake_boto3 = types.ModuleType("boto3")
 fake_boto3.client = lambda _name: types.SimpleNamespace(put_object=lambda **kw: puts.append(kw))
 sys.modules["boto3"] = fake_boto3
 os.environ["ARCHIVE_BUCKET"] = "test-bucket"
-sys.path.insert(0, "src")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 import consumer  # noqa: E402
 
 event = {"Records": [{"body": json.dumps({"detail-type": "OrderPlaced", "detail": {"order_id": "o-1", "item": "coffee", "amount": 4500}})}]}
