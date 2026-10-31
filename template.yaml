@@ -1,0 +1,450 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  devops-day-lab - an event-driven order pipeline you break on purpose (AWS FIS), watch (CloudWatch, X-Ray),
+  get paged for (SNS, OpsCenter), fix with a runbook (Systems Manager Automation) and ship safely (CodeDeploy canary).
+
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+
+Parameters:
+  Email:
+    Type: String
+    Description: On-call email. Every alarm goes here. Confirm the subscription mail once after the first deploy.
+  Phone:
+    Type: String
+    Default: ""
+    Description: Optional on-call phone in E.164 form (+8210...). Verify it in the SNS SMS sandbox first; scripts/setup.sh does that.
+  Bug:
+    Type: String
+    Default: "off"
+    AllowedValues: ["off", "on"]
+    Description: '"on" ships a consumer version that crashes on every order. Only for the canary-rollback drill (scripts/release.sh on).'
+  FisLayerArn:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /aws/service/fis/lambda-extension/AWS-FIS-extension-x86_64/1.x.x
+    Description: AWS FIS Lambda extension layer for this region, resolved from the public SSM parameter. Do not type an ARN here.
+
+Conditions:
+  HasPhone: !Not [!Equals [!Ref Phone, ""]]
+
+Resources:
+  # ---------- the app: EventBridge bus -> rule -> SQS -> Lambda -> S3 ----------
+  Bus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: !Sub ${AWS::StackName}-bus
+
+  OrderPlacedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub ${AWS::StackName}-order-placed
+      EventBusName: !Ref Bus
+      EventPattern:
+        source: [lab.shop]
+        detail-type: [OrderPlaced]
+      Targets:
+        - Id: orders-queue
+          Arn: !GetAtt OrdersQueue.Arn
+
+  OrdersQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${AWS::StackName}-orders
+      VisibilityTimeout: 30  # six times the function timeout, as Lambda recommends for SQS event sources
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt Dlq.Arn
+        maxReceiveCount: 3  # three failed attempts, then the order lands in the dead-letter queue
+
+  Dlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${AWS::StackName}-orders-dlq
+      MessageRetentionPeriod: 345600
+
+  OrdersQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref OrdersQueue]
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: {Service: events.amazonaws.com}
+            Action: sqs:SendMessage
+            Resource: !GetAtt OrdersQueue.Arn
+            Condition:
+              ArnEquals: {aws:SourceArn: !GetAtt OrderPlacedRule.Arn}
+
+  Archive:
+    Type: AWS::S3::Bucket
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: One bucket for two things - archive/ holds the processed orders, fis/ is where AWS FIS drops fault configs for the Lambda extension.
+        must: Lab data only. No versioning and no Retain on purpose - scripts/teardown.sh empties and deletes it.
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+
+  ArchivePolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Archive
+      PolicyDocument:
+        Statement:
+          - Sid: HttpsOnly
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource: [!GetAtt Archive.Arn, !Sub "${Archive.Arn}/*"]
+            Condition:
+              Bool: {aws:SecureTransport: "false"}
+
+  Consumer:
+    Type: AWS::Serverless::Function
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: The only compute. Invoked through the "live" alias so CodeDeploy can shift traffic and the FIS extension can fault it.
+        must: Keep the FIS layer and AWS_LAMBDA_EXEC_WRAPPER together - the wrapper without the layer makes every invocation fail.
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}-consumer
+      CodeUri: src/
+      Handler: consumer.handler
+      Runtime: python3.12
+      Architectures: [x86_64]
+      Timeout: 5
+      MemorySize: 256
+      Tracing: Active
+      Layers: [!Ref FisLayerArn]
+      AutoPublishAlias: live
+      AutoPublishAliasAllProperties: true  # a config-only change (Bug=on) still publishes a version, so the canary has something to roll back
+      DeploymentPreference:
+        Type: Canary10Percent5Minutes
+        Alarms: [!Ref CanaryErrors]
+      Environment:
+        Variables:
+          ARCHIVE_BUCKET: !Ref Archive
+          BUG: !Ref Bug
+          AWS_FIS_CONFIGURATION_LOCATION: !Sub arn:aws:s3:::${Archive}/fis/
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/aws-fis/bootstrap
+          AWS_FIS_POLL_MAX_WAIT_MILLISECONDS: "2000"
+          AWS_FIS_SLOW_POLL_INTERVAL_SECONDS: "10"  # default 60: faults would take up to a minute to bite, too slow for a 10-minute lab step
+      Events:
+        Orders:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt OrdersQueue.Arn
+            BatchSize: 1
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: s3:PutObject
+              Resource: !Sub ${Archive.Arn}/archive/*
+            - Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub ${Archive.Arn}/fis/*
+            - Effect: Allow
+              Action: s3:ListBucket
+              Resource: !GetAtt Archive.Arn
+
+  # ---------- load: 10 orders a minute, so every graph and alarm has something to show ----------
+  LoadRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: {Service: scheduler.amazonaws.com}
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals: {aws:SourceAccount: !Ref AWS::AccountId}
+      Policies:
+        - PolicyName: put-events
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action: events:PutEvents
+                Resource: !GetAtt Bus.Arn
+
+  Load:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub ${AWS::StackName}-load
+      Description: The shop. Ten OrderPlaced events every minute.
+      ScheduleExpression: rate(1 minute)
+      FlexibleTimeWindow: {Mode: "OFF"}
+      Target:
+        Arn: arn:aws:scheduler:::aws-sdk:eventbridge:putEvents
+        RoleArn: !GetAtt LoadRole.Arn
+        Input: !Sub |
+          {"Entries": [
+            {"EventBusName": "${Bus}", "Source": "lab.shop", "DetailType": "OrderPlaced", "Detail": "{\"order_id\": \"<aws.scheduler.execution-id>-1\", \"item\": \"coffee\", \"amount\": 4500}"},
+            {"EventBusName": "${Bus}", "Source": "lab.shop", "DetailType": "OrderPlaced", "Detail": "{\"order_id\": \"<aws.scheduler.execution-id>-2\", \"item\": \"bagel\", \"amount\": 3200}"},
+            {"EventBusName": "${Bus}", "Source": "lab.shop", "DetailType": "OrderPlaced", "Detail": "{\"order_id\": \"<aws.scheduler.execution-id>-3\", \"item\": \"latte\", \"amount\": 5000}"},
+            {"EventBusName": "${Bus}", "Source": "lab.shop", "DetailType": "OrderPlaced", "Detail": "{\"order_id\": \"<aws.scheduler.execution-id>-4\", \"item\": \"tea\", \"amount\": 3800}"},
+            {"EventBusName": "${Bus}", "Source": "lab.shop", "DetailType": "OrderPlaced", "Detail": "{\"order_id\": \"<aws.scheduler.execution-id>-5\", \"item\": \"croissant\", \"amount\": 4200}"},
+            {"EventBusName": "${Bus}", "Source": "lab.shop", "DetailType": "OrderPlaced", "Detail": "{\"order_id\": \"<aws.scheduler.execution-id>-6\", \"item\": \"sandwich\", \"amount\": 7500}"},
+            {"EventBusName": "${Bus}", "Source": "lab.shop", "DetailType": "OrderPlaced", "Detail": "{\"order_id\": \"<aws.scheduler.execution-id>-7\", \"item\": \"juice\", \"amount\": 4800}"},
+            {"EventBusName": "${Bus}", "Source": "lab.shop", "DetailType": "OrderPlaced", "Detail": "{\"order_id\": \"<aws.scheduler.execution-id>-8\", \"item\": \"muffin\", \"amount\": 3600}"},
+            {"EventBusName": "${Bus}", "Source": "lab.shop", "DetailType": "OrderPlaced", "Detail": "{\"order_id\": \"<aws.scheduler.execution-id>-9\", \"item\": \"salad\", \"amount\": 8900}"},
+            {"EventBusName": "${Bus}", "Source": "lab.shop", "DetailType": "OrderPlaced", "Detail": "{\"order_id\": \"<aws.scheduler.execution-id>-10\", \"item\": \"cookie\", \"amount\": 2500}"}
+          ]}
+
+  # ---------- on-call: alarms -> SNS (mail, SMS) + OpsCenter OpsItem ----------
+  OnCall:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub ${AWS::StackName}-oncall
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref Email
+
+  OnCallSms:
+    Type: AWS::SNS::Subscription
+    Condition: HasPhone
+    Properties:
+      TopicArn: !Ref OnCall
+      Protocol: sms
+      Endpoint: !Ref Phone
+
+  ConsumerErrors:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-consumer-errors
+      AlarmDescription: Orders are failing (5 or more errors in a minute). Pages on-call and opens a severity-2 OpsItem.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions: [{Name: FunctionName, Value: !Ref Consumer}]
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref OnCall
+        - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:opsitem:2#CATEGORY=Availability"
+      OKActions: [!Ref OnCall]
+
+  DlqNotEmpty:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-dlq-not-empty
+      AlarmDescription: Orders were given up on and sit in the dead-letter queue. Nobody got their coffee. Run the redrive runbook once the cause is fixed.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions: [{Name: QueueName, Value: !GetAtt Dlq.QueueName}]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref OnCall
+        - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:opsitem:3#CATEGORY=Recovery"
+      OKActions: [!Ref OnCall]
+
+  ConsumerSlow:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-consumer-slow
+      AlarmDescription: Orders still succeed but p95 latency is above 2 seconds. The slow kind of outage.
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Dimensions: [{Name: FunctionName, Value: !Ref Consumer}]
+      ExtendedStatistic: p95
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 2000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref OnCall
+        - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:opsitem:4#CATEGORY=Performance"
+      OKActions: [!Ref OnCall]
+
+  CanaryErrors:
+    Type: AWS::CloudWatch::Alarm
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Counts errors of the version being rolled out only (ExecutedVersion), so one bad canary invocation is enough to roll back before customers notice.
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-canary-errors
+      AlarmDescription: The new consumer version failed during its canary. CodeDeploy rolls the release back.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - {Name: FunctionName, Value: !Ref Consumer}
+        - {Name: Resource, Value: !Sub "${Consumer}:live"}
+        - {Name: ExecutedVersion, Value: !GetAtt Consumer.Version.Version}
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref OnCall]
+
+  BlastRadius:
+    Type: AWS::CloudWatch::Alarm
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: The FIS stop condition. Separate from the paging alarms on purpose - an experiment should page on-call, but it must also stop itself before the damage gets silly.
+    Properties:
+      AlarmName: !Sub ${AWS::StackName}-blast-radius
+      AlarmDescription: More than 100 orders dead-lettered. Any running FIS experiment stops.
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions: [{Name: QueueName, Value: !GetAtt Dlq.QueueName}]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 100
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Ref AWS::StackName
+      DashboardBody: !Sub |
+        {"widgets": [
+          {"type": "alarm", "x": 0, "y": 0, "width": 24, "height": 2, "properties": {"title": "Alarms",
+            "alarms": ["${ConsumerErrors.Arn}", "${DlqNotEmpty.Arn}", "${ConsumerSlow.Arn}", "${CanaryErrors.Arn}", "${BlastRadius.Arn}"]}},
+          {"type": "metric", "x": 0, "y": 2, "width": 8, "height": 6, "properties": {"title": "Orders: invocations vs errors", "region": "${AWS::Region}", "period": 60, "stat": "Sum", "view": "timeSeries",
+            "metrics": [["AWS/Lambda", "Invocations", "FunctionName", "${Consumer}"], [".", "Errors", ".", ".", {"color": "#d62728"}]]}},
+          {"type": "metric", "x": 8, "y": 2, "width": 8, "height": 6, "properties": {"title": "Latency p50 / p95 (ms)", "region": "${AWS::Region}", "period": 60, "view": "timeSeries",
+            "metrics": [["AWS/Lambda", "Duration", "FunctionName", "${Consumer}", {"stat": "p50"}], ["...", {"stat": "p95"}]]}},
+          {"type": "metric", "x": 16, "y": 2, "width": 8, "height": 6, "properties": {"title": "Queue depth: orders vs dead-letter", "region": "${AWS::Region}", "period": 60, "stat": "Maximum", "view": "timeSeries",
+            "metrics": [["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${OrdersQueue.QueueName}"], [".", ".", ".", "${Dlq.QueueName}", {"color": "#d62728"}]]}},
+          {"type": "metric", "x": 0, "y": 8, "width": 8, "height": 6, "properties": {"title": "Orders archived (app metric, EMF)", "region": "${AWS::Region}", "period": 60, "stat": "Sum", "view": "timeSeries",
+            "metrics": [["DevOpsDayLab", "OrdersArchived", "Service", "consumer"]]}},
+          {"type": "log", "x": 8, "y": 8, "width": 16, "height": 6, "properties": {"title": "Last orders (structured logs)", "region": "${AWS::Region}", "view": "table",
+            "query": "SOURCE '/aws/lambda/${Consumer}' | fields @timestamp, order_id, item, amount, ms | filter level = 'INFO' | sort @timestamp desc | limit 20"}}
+        ]}
+
+  # ---------- chaos: two AWS FIS experiment templates against the consumer ----------
+  FisRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: {Service: fis.amazonaws.com}
+            Action: sts:AssumeRole
+            Condition:  # only this account's experiments may assume the role (confused-deputy guard)
+              StringEquals: {aws:SourceAccount: !Ref AWS::AccountId}
+              ArnLike: {aws:SourceArn: !Sub "arn:aws:fis:${AWS::Region}:${AWS::AccountId}:experiment/*"}
+      Policies:
+        - PolicyName: lambda-faults
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action: [s3:PutObject, s3:DeleteObject]
+                Resource: !Sub ${Archive.Arn}/fis/*
+              - Effect: Allow
+                Action: lambda:GetFunction
+                Resource: [!GetAtt Consumer.Arn, !Sub "${Consumer.Arn}:*"]
+              - Effect: Allow
+                Action: tag:GetResources
+                Resource: "*"
+
+  FisError:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: Fail every order for 4 minutes. The extension returns an error before the handler runs.
+      RoleArn: !GetAtt FisRole.Arn
+      StopConditions:
+        - Source: aws:cloudwatch:alarm
+          Value: !GetAtt BlastRadius.Arn
+      Targets:
+        consumer:
+          ResourceType: aws:lambda:function
+          ResourceArns: [!GetAtt Consumer.Arn]
+          SelectionMode: ALL
+      Actions:
+        fail:
+          ActionId: aws:lambda:invocation-error
+          Parameters:
+            duration: PT4M
+            invocationPercentage: "100"
+            preventExecution: "true"
+          Targets: {Functions: consumer}
+      Tags: {Name: !Sub "${AWS::StackName}-error"}
+
+  FisDelay:
+    Type: AWS::FIS::ExperimentTemplate
+    Properties:
+      Description: Add 3 seconds to every order for 4 minutes. Nothing fails, everything is slow.
+      RoleArn: !GetAtt FisRole.Arn
+      StopConditions:
+        - Source: aws:cloudwatch:alarm
+          Value: !GetAtt BlastRadius.Arn
+      Targets:
+        consumer:
+          ResourceType: aws:lambda:function
+          ResourceArns: [!GetAtt Consumer.Arn]
+          SelectionMode: ALL
+      Actions:
+        delay:
+          ActionId: aws:lambda:invocation-add-delay
+          Parameters:
+            duration: PT4M
+            invocationPercentage: "100"
+            startupDelayMilliseconds: "3000"
+          Targets: {Functions: consumer}
+      Tags: {Name: !Sub "${AWS::StackName}-delay"}
+
+  # ---------- recovery: the runbook on-call runs from the OpsItem ----------
+  Redrive:
+    Type: AWS::SSM::Document
+    Properties:
+      Name: !Sub ${AWS::StackName}-redrive-dlq
+      DocumentType: Automation
+      UpdateMethod: NewVersion
+      Content:
+        schemaVersion: "0.3"
+        description: Move every order in the dead-letter queue back to the orders queue (sqs:StartMessageMoveTask). Run it after the cause is fixed, or the orders just come back.
+        mainSteps:
+          - name: redrive
+            action: aws:executeAwsApi
+            inputs:
+              Service: sqs
+              Api: StartMessageMoveTask
+              SourceArn: !GetAtt Dlq.Arn
+              DestinationArn: !GetAtt OrdersQueue.Arn
+              MaxNumberOfMessagesPerSecond: 10
+            outputs:
+              - Name: TaskHandle
+                Selector: $.TaskHandle
+                Type: String
+
+Outputs:
+  Dashboard:
+    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards/dashboard/${Dashboard}
+  BusName:
+    Value: !Ref Bus
+  ConsumerName:
+    Value: !Ref Consumer
+  OrdersQueueUrl:
+    Value: !Ref OrdersQueue
+  DlqUrl:
+    Value: !Ref Dlq
+  ArchiveBucket:
+    Value: !Ref Archive
+  FisErrorTemplate:
+    Value: !Ref FisError
+  FisDelayTemplate:
+    Value: !Ref FisDelay
+  Runbook:
+    Value: !Ref Redrive
+  OnCallTopic:
+    Value: !Ref OnCall

@@ -1,0 +1,46 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LabServices",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:*",
+        "lambda:*",
+        "events:*",
+        "scheduler:*",
+        "sqs:*",
+        "sns:*",
+        "s3:*",
+        "cloudwatch:*",
+        "logs:*",
+        "xray:*",
+        "fis:*",
+        "codedeploy:*",
+        "ssm:*",
+        "notifications:*",
+        "notifications-contacts:*",
+        "tag:GetResources",
+        "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "LabRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:TagRole",
+        "iam:PassRole",
+        "iam:GetRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy"
+      ],
+      "Resource": "arn:aws:iam::*:role/devops-day-lab-*"
+    }
+  ]
+}
