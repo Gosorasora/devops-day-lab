@@ -1,4 +1,6 @@
-# devops-day-lab
+# DevOps 체험하기: 카오스 엔지니어링(AWS FIS)과 온콜 대응(CloudWatch, SNS, OpsCenter)
+
+저장소 `devops-day-lab`.
 
 **일부러 부수고, 지켜보고, 호출을 받고, 고치고, 마지막에는 망가진 버전을 배포해 보는 작은 주문 파이프라인입니다.** `sam deploy` 한 번으로 EventBridge 버스, 데드레터 큐가 붙은 SQS 큐, Lambda 함수 하나, S3 아카이브, 알람 다섯 개가 붙은 CloudWatch 대시보드, AWS FIS 카오스 실험 두 개, SNS 온콜 토픽, OpsCenter 티켓, Systems Manager 런북, CodeDeploy 카나리 배포가 올라갑니다. 온콜 엔지니어가 힘든 한 주에 겪는 일을 55분에 압축했습니다.
 
@@ -48,7 +50,7 @@
 
 ## 실습
 
-참가자 가이드는 [docs/guide.ko.md](docs/guide.ko.md)([English](docs/guide.md))입니다. 콘솔을 클릭 단위로 따라가는 스크린샷 안내는 [docs/walkthrough.ko.md](docs/walkthrough.ko.md)입니다. 55분 본편이고, 그 안에 30분 단축 경로가 표시돼 있습니다.
+참가자 가이드는 [docs/guide.ko.md](docs/guide.ko.md)([English](docs/guide.md))입니다. 콘솔을 클릭 단위로 따라가는 스크린샷 안내는 [docs/walkthrough.ko.md](docs/walkthrough.ko.md), 진행자가 읽는 55분 대본은 [docs/script.ko.md](docs/script.ko.md)입니다. 55분 본편이고, 그 안에 30분 단축 경로가 표시돼 있습니다.
 
 1. **배포** (10분): `./scripts/setup.sh`, 메일 승인, 대시보드 열기.
 2. **기준선** (10분): 대시보드, Logs Insights 쿼리, X-Ray 서비스 맵을 읽습니다. 정상이 무엇인지 알아둡니다.
@@ -119,7 +121,7 @@ test_consumer.py    python3 test_consumer.py (네트워크 없음, boto3 설치 
 template.yaml       SAM 템플릿. 실습 전체
 scripts/            setup.sh, send.sh, chaos.sh, release.sh, redrive.sh, teardown.sh
 iam/lab-policy.json 배포 주체에 필요한 권한
-docs/               guide.md, guide.ko.md, walkthrough.ko.md, screenshots/, architecture.png
+docs/               guide.md, guide.ko.md, walkthrough.ko.md, script.ko.md, screenshots/, architecture.png
 DECISIONS.md        왜 이렇게 정했는가
 ```
 

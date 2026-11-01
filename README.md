@@ -1,4 +1,6 @@
-# devops-day-lab
+# Hands-on DevOps: Chaos Engineering (AWS FIS) and On-call Response (CloudWatch, SNS, OpsCenter)
+
+Repository `devops-day-lab`.
 
 **A small order pipeline on AWS that you break on purpose, watch, get paged for, fix, and then ship a bad release to.** One `sam deploy` gives you an EventBridge bus, an SQS queue with a dead-letter queue, one Lambda function, an S3 archive, a CloudWatch dashboard with five alarms, two AWS FIS chaos experiments, an SNS on-call topic, OpsCenter tickets, a Systems Manager runbook and a CodeDeploy canary. In 55 minutes you do what an on-call engineer does in a bad week.
 
@@ -48,7 +50,7 @@ The script is safe to re-run: press Enter at a prompt to keep the stored value. 
 
 ## The lab
 
-The participant guide is [docs/guide.md](docs/guide.md) ([한국어](docs/guide.ko.md)). A click-by-click console walkthrough with screenshots is [docs/walkthrough.ko.md](docs/walkthrough.ko.md) (Korean). The 55-minute path, with a 30-minute short path marked inside it:
+The participant guide is [docs/guide.md](docs/guide.md) ([한국어](docs/guide.ko.md)). A click-by-click console walkthrough with screenshots is [docs/walkthrough.ko.md](docs/walkthrough.ko.md) and the 55-minute presenter script is [docs/script.ko.md](docs/script.ko.md) (both Korean). The 55-minute path, with a 30-minute short path marked inside it:
 
 1. **Deploy** (10 min): `./scripts/setup.sh`, confirm the mail, open the dashboard.
 2. **Baseline** (10 min): read the dashboard, a Logs Insights query, the X-Ray service map. Know what normal looks like.
@@ -120,7 +122,7 @@ test_consumer.py    python3 test_consumer.py (no network, no boto3 install)
 template.yaml       SAM template: the whole lab
 scripts/            setup.sh, send.sh, chaos.sh, release.sh, redrive.sh, teardown.sh
 iam/lab-policy.json permissions for the deploying identity
-docs/               guide.md, guide.ko.md, walkthrough.ko.md, screenshots/, architecture.png
+docs/               guide.md, guide.ko.md, walkthrough.ko.md, script.ko.md, screenshots/, architecture.png
 DECISIONS.md        why things are the way they are (Korean)
 ```
 

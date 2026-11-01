@@ -1,4 +1,6 @@
-# DevOps Day lab guide (55 minutes, with a 30-minute short path)
+# Hands-on DevOps: Chaos Engineering (AWS FIS) and On-call Response (CloudWatch, SNS, OpsCenter)
+
+Lab guide (55 minutes, with a 30-minute short path)
 
 You deploy one order pipeline, learn what normal looks like, break it on purpose, get paged and respond, then ship a broken version as a canary and watch the automatic rollback. Every command runs in AWS CloudShell from the repository root.
 
