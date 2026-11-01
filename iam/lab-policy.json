@@ -12,6 +12,7 @@
         "scheduler:*",
         "sqs:*",
         "sns:*",
+        "sms-voice:*",
         "s3:*",
         "cloudwatch:*",
         "logs:*",
