@@ -100,7 +100,7 @@ The participant guide is [docs/guide.md](docs/guide.md) ([한국어](docs/guide.
 `iam/lab-policy.json` is what the deploying user or role needs. It is broad on the lab's services and limited to roles named `devops-day-lab-*` on IAM, which is appropriate for a sandbox account and not for a shared one. For an IAM user:
 
 ```bash
-aws iam put-user-policy --user-name <user> --policy-name devops-day-lab --policy-document file://iam/lab-policy.json
+aws iam put-user-policy --user-name <user> --policy-name devops-handson --policy-document file://iam/lab-policy.json
 ```
 
 The optional Console Mobile App push (AWS User Notifications) is covered by the same policy.

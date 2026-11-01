@@ -100,7 +100,7 @@
 배포하는 사용자나 역할에 필요한 권한이 `iam/lab-policy.json`입니다. 실습 서비스에는 넓고, IAM은 `devops-day-lab-*` 이름의 역할로 제한했습니다. 샌드박스 계정용이며 공유 계정에는 맞지 않습니다. IAM 사용자라면:
 
 ```bash
-aws iam put-user-policy --user-name <사용자> --policy-name devops-day-lab --policy-document file://iam/lab-policy.json
+aws iam put-user-policy --user-name <사용자> --policy-name devops-handson --policy-document file://iam/lab-policy.json
 ```
 
 선택 단계인 Console Mobile App 푸시(AWS User Notifications)에 필요한 권한도 들어 있습니다.

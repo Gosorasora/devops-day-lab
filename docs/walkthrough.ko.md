@@ -16,13 +16,13 @@
    ![](screenshots/02-iam-policy-json-toggle.png)
 3. `iam/lab-policy.json` 내용을 붙여 넣고 **다음**.
    ![](screenshots/03-iam-policy-json-filled.png)
-4. 정책 이름 `devops-day-lab`.
+4. 정책 이름 `devops-handson`. (스크린샷에는 이전 이름 `devops-day-lab`이 보인다. 이름만 다르고 순서는 같다.)
    ![](screenshots/04-iam-policy-name.png)
 5. **정책 생성**.
    ![](screenshots/05-iam-policy-create-button.png)
 6. 생성 확인.
    ![](screenshots/06-iam-policy-created.png)
-7. IAM > 사용자 > 실습에 쓸 사용자(여기서는 `Agent`).
+7. IAM > 사용자 > 실습에 쓸 사용자.
    ![](screenshots/07-iam-users-list.png)
 8. **권한 추가** 드롭다운.
    ![](screenshots/08-iam-user-add-permissions.png)
@@ -30,7 +30,7 @@
    ![](screenshots/09-iam-user-add-permissions-menu.png)
 10. **직접 정책 연결**.
     ![](screenshots/10-iam-attach-direct-radio.png)
-11. `devops-day-lab` 검색 후 체크.
+11. `devops-handson` 검색 후 체크.
     ![](screenshots/11-iam-attach-select-policy.png)
 12. **다음**.
     ![](screenshots/12-iam-attach-next.png)
