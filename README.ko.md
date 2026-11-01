@@ -48,7 +48,7 @@
 
 ## 실습
 
-참가자 가이드는 [docs/guide.ko.md](docs/guide.ko.md)([English](docs/guide.md))입니다. 55분 본편이고, 그 안에 30분 단축 경로가 표시돼 있습니다.
+참가자 가이드는 [docs/guide.ko.md](docs/guide.ko.md)([English](docs/guide.md))입니다. 콘솔을 클릭 단위로 따라가는 스크린샷 안내는 [docs/walkthrough.ko.md](docs/walkthrough.ko.md)입니다. 55분 본편이고, 그 안에 30분 단축 경로가 표시돼 있습니다.
 
 1. **배포** (10분): `./scripts/setup.sh`, 메일 승인, 대시보드 열기.
 2. **기준선** (10분): 대시보드, Logs Insights 쿼리, X-Ray 서비스 맵을 읽습니다. 정상이 무엇인지 알아둡니다.
@@ -119,7 +119,7 @@ test_consumer.py    python3 test_consumer.py (네트워크 없음, boto3 설치 
 template.yaml       SAM 템플릿. 실습 전체
 scripts/            setup.sh, send.sh, chaos.sh, release.sh, redrive.sh, teardown.sh
 iam/lab-policy.json 배포 주체에 필요한 권한
-docs/               guide.md, guide.ko.md, architecture.png
+docs/               guide.md, guide.ko.md, walkthrough.ko.md, screenshots/, architecture.png
 DECISIONS.md        왜 이렇게 정했는가
 ```
 

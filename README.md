@@ -48,7 +48,7 @@ The script is safe to re-run: press Enter at a prompt to keep the stored value. 
 
 ## The lab
 
-The participant guide is [docs/guide.md](docs/guide.md) ([한국어](docs/guide.ko.md)). The 55-minute path, with a 30-minute short path marked inside it:
+The participant guide is [docs/guide.md](docs/guide.md) ([한국어](docs/guide.ko.md)). A click-by-click console walkthrough with screenshots is [docs/walkthrough.ko.md](docs/walkthrough.ko.md) (Korean). The 55-minute path, with a 30-minute short path marked inside it:
 
 1. **Deploy** (10 min): `./scripts/setup.sh`, confirm the mail, open the dashboard.
 2. **Baseline** (10 min): read the dashboard, a Logs Insights query, the X-Ray service map. Know what normal looks like.
@@ -120,7 +120,7 @@ test_consumer.py    python3 test_consumer.py (no network, no boto3 install)
 template.yaml       SAM template: the whole lab
 scripts/            setup.sh, send.sh, chaos.sh, release.sh, redrive.sh, teardown.sh
 iam/lab-policy.json permissions for the deploying identity
-docs/               guide.md, guide.ko.md, architecture.png
+docs/               guide.md, guide.ko.md, walkthrough.ko.md, screenshots/, architecture.png
 DECISIONS.md        why things are the way they are (Korean)
 ```
 
